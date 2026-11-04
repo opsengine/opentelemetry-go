@@ -235,9 +235,7 @@ func NewSetWithFiltered(kvs []KeyValue, filter Filter) (Set, []KeyValue) {
 
 	// Stable sort so the following de-duplication can implement
 	// last-value-wins semantics.
-	slices.SortStableFunc(kvs, func(a, b KeyValue) int {
-		return cmp.Compare(a.Key, b.Key)
-	})
+	sortKVs(kvs)
 
 	position := len(kvs) - 1
 	offset := position - 1
@@ -263,6 +261,48 @@ func NewSetWithFiltered(kvs []KeyValue, filter Filter) (Set, []KeyValue) {
 		}
 	}
 	return newSet(kvs), nil
+}
+
+// maxInsertionSort is the largest input where binary insertion sort beats
+// slices.SortStableFunc, even on reversed input.
+const maxInsertionSort = 64
+
+// sortKVs stably sorts kvs by key.
+func sortKVs(kvs []KeyValue) {
+	if len(kvs) > maxInsertionSort {
+		stdlibSortKVs(kvs)
+		return
+	}
+	binaryInsertionSortKVs(kvs)
+}
+
+// stdlibSortKVs stably sorts kvs by key with slices.SortStableFunc.
+func stdlibSortKVs(kvs []KeyValue) {
+	slices.SortStableFunc(kvs, func(a, b KeyValue) int {
+		return cmp.Compare(a.Key, b.Key)
+	})
+}
+
+// binaryInsertionSortKVs stably sorts kvs by key with binary insertion sort.
+func binaryInsertionSortKVs(kvs []KeyValue) {
+	for i := 1; i < len(kvs); i++ {
+		if kvs[i-1].Key <= kvs[i].Key {
+			continue
+		}
+		kv := kvs[i]
+		// Insert after equal keys to keep the sort stable.
+		lo, hi := 0, i-1
+		for lo < hi {
+			m := int(uint(lo+hi) >> 1)
+			if kvs[m].Key <= kv.Key {
+				lo = m + 1
+			} else {
+				hi = m
+			}
+		}
+		copy(kvs[lo+1:i+1], kvs[lo:i])
+		kvs[lo] = kv
+	}
 }
 
 // NewSetWithSortableFiltered returns a new Set.

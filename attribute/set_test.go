@@ -4,7 +4,9 @@
 package attribute_test
 
 import (
+	"fmt"
 	"math"
+	"math/rand/v2"
 	"reflect"
 	"regexp"
 	"strings"
@@ -707,6 +709,29 @@ func TestSetString(t *testing.T) {
 	}
 }
 
+func BenchmarkNewSetSizes(b *testing.B) {
+	for _, n := range []int{3, 5, 8, 12, 16, 20, 32, 64, 65} {
+		// Cycle through several random orders so branch prediction cannot learn one.
+		r := rand.New(rand.NewPCG(42, uint64(n)))
+		inputs := make([][]attribute.KeyValue, 16)
+		for i := range inputs {
+			inputs[i] = make([]attribute.KeyValue, n)
+			for j, k := range r.Perm(n) {
+				inputs[i][j] = attribute.String(fmt.Sprintf("k%03d", k), "v")
+			}
+		}
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			// NewSet sorts in place, so restore the input order each time.
+			buf := make([]attribute.KeyValue, n)
+			b.ReportAllocs()
+			for i := 0; b.Loop(); i++ {
+				copy(buf, inputs[i%len(inputs)])
+				attribute.NewSet(buf...)
+			}
+		})
+	}
+}
+
 func BenchmarkNewSetStringAttrs(b *testing.B) {
 	testCases := []struct {
 		name     string
@@ -729,5 +754,28 @@ func BenchmarkNewSetStringAttrs(b *testing.B) {
 				attribute.NewSet(attrs...)
 			}
 		})
+	}
+}
+
+func TestNewSetUnsortedLastValueWins(t *testing.T) {
+	for _, n := range []int{3, 8, 21, 64, 65, 100} {
+		var kvs []attribute.KeyValue
+		for i := n - 1; i >= 0; i-- {
+			k := fmt.Sprintf("k%02d", i%7)
+			kvs = append(kvs, attribute.Int(k, i))
+		}
+		want := map[string]int64{}
+		for _, kv := range kvs {
+			want[string(kv.Key)] = kv.Value.AsInt64()
+		}
+		s := attribute.NewSet(kvs...)
+		if s.Len() != len(want) {
+			t.Fatalf("n=%d: len = %d, want %d", n, s.Len(), len(want))
+		}
+		for k, v := range want {
+			if got, _ := s.Value(attribute.Key(k)); got.AsInt64() != v {
+				t.Errorf("n=%d key %s = %d, want last value %d", n, k, got.AsInt64(), v)
+			}
+		}
 	}
 }

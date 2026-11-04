@@ -34,6 +34,7 @@ See our [versioning policy](VERSIONING.md) for more information about these stab
 
 ### Changed
 
+- Improve performance of `NewSet` and `NewSetWithFiltered` for sets of up to 64 attributes in `go.opentelemetry.io/otel/attribute`.
 - Stabilize the `go.opentelemetry.io/otel/exporters/stdout/stdoutlog` module.
   The exporter's output format may still change, as documented in the [package documentation](https://pkg.go.dev/go.opentelemetry.io/otel/exporters/stdout/stdoutlog). (#9472)
 - `ErrorType` in `go.opentelemetry.io/otel/semconv/v1.44.0` now unwraps single-error `errors.Join` wrappers when deriving the `error.type` attribute. (#9466)
